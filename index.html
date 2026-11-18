@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>ナースエイド勤務表アプリ</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <!-- 限定公開アクセス認証ロック画面 -->
+  <div id="auth-lock-overlay" class="auth-lock-overlay no-print">
+    <div class="auth-card">
+      <div class="auth-icon">🔒</div>
+      <div class="auth-title">ナースエイド勤務表（限定共有）</div>
+      <div class="auth-desc">
+        このアプリは共有された方のみ利用できます。<br/>
+        管理者から共有された<strong>合言葉（パスコード）</strong>を入力してください。
+      </div>
+      <input type="password" id="input-auth-passcode" class="auth-input" placeholder="パスコードを入力" />
+      <div id="auth-error-msg" class="auth-error"></div>
+      <button type="button" id="btn-auth-submit" class="btn btn-primary" style="width:100%; justify-content:center; padding:10px; font-size:14px;">
+        🔓 認証して開く
+      </button>
+    </div>
+  </div>
+
+  <!-- トップヘッダー＆ツールバー -->
+  <header class="app-header no-print">
+    <div class="brand">
+      <div class="brand-icon">看</div>
+      <div>
+        <div class="brand-title">ナースエイド勤務表</div>
+        <div class="brand-subtitle">日・夜・明・休・年・研 対応 ／ 自動作成＆ルール検証</div>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <div class="month-selector">
+        <button type="button" id="btn-prev-month" class="btn btn-sm" title="前月へ">◀ 前月</button>
+        <div id="month-display" class="month-display">2026年 12月</div>
+        <button type="button" id="btn-next-month" class="btn btn-sm" title="翌月へ">翌月 ▶</button>
+      </div>
+
+      <div class="weekly-off-box" title="その月のカレンダーから週休数を自動算出して表示します。数値は直接編集可能です。">
+        <span class="weekly-off-label">📅 週休数:</span>
+        <input type="number" id="input-base-weekly-off" class="weekly-off-input" min="0" max="31" value="9" />
+        <span style="font-size:12px; font-weight:700; color:#0369a1;">日</span>
+        <span id="weekly-off-auto-info" class="weekly-off-sub"></span>
+        <button type="button" id="btn-auto-weekly-off" class="btn btn-sm" title="その月の土日祝の日数から週休数を自動再計算して全員に反映します">自動算出</button>
+      </div>
+    </div>
+
+    <div class="toolbar-actions">
+      <button type="button" id="btn-share-modal" class="btn" style="background:#f0fdf4; border-color:#86efac; color:#166534;">🔐 共有・アクセス制限</button>
+      <button type="button" id="btn-staff-modal" class="btn">⚙ スタッフ・個人事情設定</button>
+      <button type="button" id="btn-auto-generate" class="btn btn-accent">✨ シフト自動作成</button>
+      <button type="button" id="btn-clear-unlocked" class="btn btn-sm">🧹 ロック以外クリア</button>
+      <button type="button" id="btn-unlock-all" class="btn btn-sm">🔓 全ロック解除</button>
+      <button type="button" id="btn-export-excel" class="btn btn-primary">📥 Excel出力</button>
+      <button type="button" id="btn-print" class="btn">🖨 A4印刷</button>
+      <button type="button" id="btn-export-json" class="btn btn-sm" title="データをファイルに保存">💾 保存</button>
+      <button type="button" id="btn-import-json" class="btn btn-sm" title="保存したデータを読み込み">📂 読込</button>
+      <input type="file" id="file-import-json" accept=".json" style="display:none;" />
+    </div>
+  </header>
+
+  <main class="main-container">
+    <!-- 印刷時専用タイトルヘッダー -->
+    <div class="print-only-header">
+      <div>
+        <h1 id="print-title">ナースエイド勤務表（2026年12月）</h1>
+      </div>
+      <div style="font-size: 9pt; text-align: right;">
+        【勤務時間】日(常勤): 8:30-17:20 ／ 日(パート): 8:30-14:00 ／ 夜: 16:30-23:59 ／ 明: 00:00-9:00 ／ 休・年・研: 終日
+      </div>
+    </div>
+
+    <!-- シフト入力パレット＆オプションバー -->
+    <section class="control-bar no-print">
+      <div class="palette-group">
+        <span class="palette-label">入力スタンプ選択:</span>
+        <div id="palette-buttons" class="palette-group"></div>
+      </div>
+
+      <div class="options-group">
+        <span style="display:inline-flex; align-items:center; gap:5px; background:#fef08a; border:1.5px solid #ca8a04; padding:2px 8px; border-radius:4px; font-weight:700; color:#713f12;">
+          <span style="display:inline-block; width:8px; height:8px; background:#ea580c;"></span>
+          ✍️ 手入力マス強調表示
+        </span>
+        <label class="checkbox-label" title="ONの場合、「夜」をクリックすると翌日「明」・翌々日「休」が100%セットで同時に入ります">
+          <input type="checkbox" id="chk-auto-night-set" checked />
+          「夜」入力時に翌日「明」・翌々日「休」を自動セット
+        </label>
+        <label class="checkbox-label" title="ONの場合、手動でクリック入力したマスに自動的に📌ロックを付けます（自動作成で上書きされなくなります）">
+          <input type="checkbox" id="chk-auto-lock" checked />
+          手動入力したマスを自動ロック(📌)
+        </label>
+      </div>
+    </section>
+
+    <!-- リアルタイム検証ステータス・アラート表示 -->
+    <section id="status-panel" class="status-panel no-print"></section>
+
+    <!-- 勤務表テーブル本体 -->
+    <section class="table-container">
+      <table class="schedule-table">
+        <thead id="schedule-thead"></thead>
+        <tbody id="schedule-tbody"></tbody>
+        <tfoot id="schedule-tfoot"></tfoot>
+      </table>
+    </section>
+
+    <!-- 勤務条件・ルール一覧パネル -->
+    <section class="legend-panel no-print">
+      <div class="legend-card">
+        <h4>🕒 勤務区分と勤務時間</h4>
+        <ul>
+          <li><strong>「日」</strong>：常勤 <code>8:30-17:20</code> ／ パート <code>8:30-14:00</code></li>
+          <li><strong>「夜」</strong>：<code>16:30-23:59</code>（翌日は「明」、翌々日は「休」が100%セット）</li>
+          <li><strong>「明」</strong>：<code>00:00-9:00</code></li>
+          <li><strong>「休」「年」「研」</strong>：終日（パートは土日祝すべて休み）</li>
+          <li><strong>「年」の振替ルール</strong>：「年」が入力された日は「休」か「年」として扱い、「休」にした場合（夜→明→休の「休」になった場合や手動で「休」に変えた場合）は別の休日に自動で「年」をつけます</li>
+          <li><strong>「夜外（夜勤以外）」</strong>：「夜」のみ不可とし、自動作成時に「日」「明」「休」のいずれかを自動割当</li>
+          <li><strong>「明/休」</strong>：「日」「夜」を不可とし、自動作成時に「明」または「休」のいずれかを自動割当</li>
+        </ul>
+      </div>
+
+      <div class="legend-card">
+        <h4>👥 1日あたりの必要人数ルール</h4>
+        <ul>
+          <li><strong>平日 日勤</strong>：<strong>2〜3名</strong>（<span style="color:#b91c1c;font-weight:bold;">※パートを含む場合は3〜4名</span>）</li>
+          <li><strong>休日(土日祝) 日勤</strong>：<strong>1〜2名</strong></li>
+          <li><strong>平日・休日 夜勤</strong>：<strong>1〜2名</strong></li>
+          <li>※日付の数字をクリックすると、祝日（年末年始等の休日扱い）を切り替えられます。</li>
+        </ul>
+      </div>
+
+      <div class="legend-card">
+        <h4>🌙 夜勤・連勤・週休厳守ルール</h4>
+        <ul>
+          <li><strong>設定週休数の厳守（必須ルール）</strong>：各スタッフの「休」日数が設定された「週休数」と完全に一致することを必須とします。</li>
+          <li><strong>連続日勤の上限</strong>：基本は<code>3日勤まで</code>。<code>4日勤</code>は許容しますが<strong>翌日は必ず「休」</strong>とします（5日勤以上は不可）。</li>
+          <li><strong>夜勤前の日勤</strong>：<code>0〜2日勤→夜</code>が基本。<code>3日勤→夜</code>は許容、<strong><code>4日勤→夜</code>は不可</strong>。</li>
+          <li><strong>連続夜勤</strong>：基本は連続させない。<strong><code>2夜勤連続(夜・明・休・夜)</code>まで許容</strong>、3夜勤連続は不可。</li>
+          <li><strong>夜勤回数と個人事情</strong>：上限6回。個人の事情（個別上限設定）を最優先し、通常スタッフ全員が同じ回数になるよう均等配分します。</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <!-- スタッフ・個人事情設定モーダル -->
+  <div id="staff-modal" class="modal-backdrop no-print">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>⚙ スタッフ・夜勤の個人事情設定</h3>
+        <button type="button" id="btn-close-modal" class="btn btn-sm">✕ 閉じる</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 10px; font-size: 12px; color: #475569;">
+          ※「通常（全員同数で均等・上限6回）」のスタッフは全員が同じ夜勤回数になるよう自動調整されます。<br/>
+          ※個人の事情（育児・体調配慮・時短等）があるスタッフは「★個人事情あり」を選択して上限・目標回数（0〜6回）を設定してください（個人事情が最優先されます）。
+        </p>
+        <table class="staff-config-table">
+          <thead>
+            <tr>
+              <th style="width:36px;">No</th>
+              <th style="width:150px;">氏名</th>
+              <th style="width:190px;">雇用区分・勤務時間</th>
+              <th style="width:220px;">夜勤割当モード</th>
+              <th style="width:95px;">夜勤回数上限</th>
+              <th>個人事情・備考メモ</th>
+              <th style="width:60px;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="modal-staff-tbody"></tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="btn-add-staff" class="btn">＋ スタッフを追加</button>
+        <div style="display:flex; gap:8px;">
+          <button type="button" id="btn-cancel-modal" class="btn">キャンセル</button>
+          <button type="button" id="btn-save-modal" class="btn btn-primary">設定を保存して反映</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 共有・アクセス制限設定モーダル -->
+  <div id="share-modal" class="modal-backdrop no-print">
+    <div class="modal-content" style="max-width: 620px;">
+      <div class="modal-header">
+        <h3>🔐 外部共有・アクセス制限設定（共有した人だけ利用可能）</h3>
+        <button type="button" id="btn-close-share-modal" class="btn btn-sm">✕ 閉じる</button>
+      </div>
+      <div class="modal-body">
+        <div class="share-section">
+          <h4>1. パスコード保護の有効／無効</h4>
+          <label class="checkbox-label" style="font-size:13px;">
+            <input type="checkbox" id="chk-enable-auth" checked />
+            <strong>アクセス制限を有効にする（合言葉または招待リンクを知っている人だけ利用可能にする）</strong>
+          </label>
+        </div>
+
+        <div class="share-section">
+          <h4>2. 共有パスコード（合言葉）の設定</h4>
+          <p style="font-size:11.5px; color:#475569; margin-bottom:6px;">
+            共有したい相手に伝える合言葉（半角英数字・日本語どちらも可）を設定してください。
+          </p>
+          <div class="url-copy-row">
+            <input type="text" id="input-share-passcode" class="input-text" style="max-width:220px; font-weight:bold;" placeholder="例: na2026" />
+            <button type="button" id="btn-save-share-settings" class="btn btn-primary">💾 パスコードを保存</button>
+          </div>
+        </div>
+
+        <div class="share-section">
+          <h4>3. 共有する相手に送るURL（2通りの共有方法）</h4>
+          <div style="margin-bottom:10px;">
+            <strong style="font-size:12px;">方法A：通常URL（開くとパスコード入力画面が表示されます）</strong>
+            <div class="url-copy-row">
+              <input type="text" id="input-share-normal-url" class="input-text" readonly />
+              <button type="button" id="btn-copy-normal-url" class="btn btn-sm">📋 URLコピー</button>
+            </div>
+          </div>
+
+          <div>
+            <strong style="font-size:12px; color:#0369a1;">方法B：ワンクリック招待リンク（このリンクを送った相手はクリックするだけで自動認証されます）</strong>
+            <div class="url-copy-row">
+              <input type="text" id="input-share-invite-url" class="input-text" readonly />
+              <button type="button" id="btn-copy-invite-url" class="btn btn-sm btn-primary">📋 招待リンクをコピー</button>
+            </div>
+            <div style="margin-top:6px; display:flex; align-items:center; justify-content:space-between;">
+              <span style="font-size:11px; color:#64748b;">※招待リンクを無効化したい場合は「招待キー再発行」を押してください。</span>
+              <button type="button" id="btn-regen-invite-token" class="btn btn-sm btn-danger-outline">🔄 招待キー再発行</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="btn-lock-now" class="btn btn-sm btn-danger-outline" title="現在のブラウザをロックして認証画面の動作を確認します">🔒 今すぐロック画面を確認</button>
+        <button type="button" id="btn-ok-share-modal" class="btn btn-primary">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/holidays.js"></script>
+  <script src="js/validator.js"></script>
+  <script src="js/solver.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
